@@ -5,26 +5,25 @@
 float PI = 3.14159265359;
 #define N 8 // matrix size
 
-// 定義 BMP 標頭的結構
+// 定義 BMP 標頭的結構,54
 typedef struct Bmpheader 
 {
-	char identifier[2];             // BMP 檔案標識，0x0000
-	unsigned int filesize;          // 檔案大小，0x0002
-	unsigned short reserved;        // 保留字段，0x0006
-	unsigned short reserved2;
-	unsigned int bitmap_dataoffset; // 位圖數據的偏移，0x000A
-	unsigned int bitmap_headersize; // 位圖標頭的大小，0x000E
-	unsigned int width;             // 影像寬度，0x0012
-	unsigned int height;            // 影像高度，0x0016
-	unsigned short planes;          // 圖像的位平面數，0x001A
-	unsigned short bits_perpixel;   // 每像素位元數，0x001C
-	unsigned int compression;       // 圖像壓縮方式，0x001E
-	unsigned int bitmap_datasize;   // 位圖數據的大小，0x0022
-	unsigned int hresolution;       // 水平分辨率，0x0026
-	unsigned int vresolution;       // 垂直分辨率，0x002A
-	unsigned int usedcolors;        // 使用的顏色索引數，0x002E
-	unsigned int importantcolors;   // 重要的顏色索引數，0x0032
-	unsigned int palette;           // 調色板，0x0036
+	char identifier[2];             // BMP 檔案標識,2
+	unsigned int filesize;          // 檔案大小,4
+	unsigned short reserved;        // 保留字段,2
+	unsigned short reserved2;		//2
+	unsigned int bitmap_dataoffset; // 位圖數據的偏移,4
+	unsigned int bitmap_headersize; // 位圖標頭的大小,4
+	unsigned int width;             // 影像寬度,4
+	unsigned int height;            // 影像高度,4
+	unsigned short planes;          // 圖像的位平面數,2
+	unsigned short bits_perpixel;   // 每像素位元數,2
+	unsigned int compression;       // 圖像壓縮方式,4
+	unsigned int bitmap_datasize;   // 位圖數據的大小,4
+	unsigned int hresolution;       // 水平分辨率,4
+	unsigned int vresolution;       // 垂直分辨率,4
+	unsigned int usedcolors;        // 使用的顏色索引數,4
+	unsigned int importantcolors;   // 重要的顏色索引數,4
 } Bitmap;
 
 // 定義 RGB 結構
@@ -39,7 +38,7 @@ typedef struct RGB
 void readheader(FILE* fp, Bitmap *x);
 ImgRGB** malloc_2D(int row, int col);
 void InputData(FILE* fp, ImgRGB **array, int H, int W, int skip);
-void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip,FILE* out_R,FILE* out_G,FILE* out_B);
+void output_bmp(ImgRGB **RGB, Bitmap bmpheader,FILE* out_R,FILE* out_G,FILE* out_B);
 
 //function 1
 void rgb2ycbcr(ImgRGB **array, int H, int W);
@@ -126,7 +125,7 @@ int main(int argc, char **argv, ImgRGB **array)
 		fp_eF_Cr=fopen(eF_Cr,"wb");
 	}
 
-		// 讀取 BMP 標頭
+	// 讀取 BMP 標頭
 	Bitmap bmpheader;
 	readheader(fp_in, &bmpheader);
 
@@ -148,7 +147,6 @@ int main(int argc, char **argv, ImgRGB **array)
 	if (W % 8 != 0) block_W++;
 
 	printf("Image size: Width: %d x Height=%d pixels, total %d bytes\n", W, H, W*H * 3);
-	//printf("Image line skip=%d bytes\n", skip);
 	printf("\nLoading BMP data: RRGGBB RRGGBB ... (BGR format in BMP file)\n");
 	printf("%d %d\n",H,W);
 
@@ -161,9 +159,9 @@ int main(int argc, char **argv, ImgRGB **array)
 
 	if(method == 0)
 	{
-		// 輸出 BMP 檔案
-		output_bmp(Data_RGB, fp_in, bmpheader, skip,fp_R,fp_G,fp_B);
-		printf("\n"); // DEBUG
+		// 輸出RGB數據
+		output_bmp(Data_RGB, bmpheader,fp_R,fp_G,fp_B);
+
 		// 釋放記憶體並關閉檔案
 		free(Data_RGB[0]);
 		free(Data_RGB);
@@ -175,6 +173,7 @@ int main(int argc, char **argv, ImgRGB **array)
 		printf("Job done!\n");
 		return 0;
 	}
+	
 	if(method == 1)
 	{
 		// 對輸入資料進行rgb2ycbcr
@@ -273,51 +272,19 @@ void InputData(FILE* fp, ImgRGB **array, int H, int W, int skip)
 	printf("\n"); // DEBUG
 }
 
-// 輸出 BMP 標頭和數據的函數
-void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip,FILE* out_R,FILE* out_G,FILE* out_B) 
+// 輸出RGB數據
+void output_bmp(ImgRGB **RGB, Bitmap bmpheader,FILE* out_R,FILE* out_G,FILE* out_B) 
 {
 	char skip_buf[3] = { 0, 0, 0 };
 	int x, y;
-	fwrite(&bmpheader.identifier, sizeof(short), 1, outfile);
-	fwrite(&bmpheader.filesize, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.reserved, sizeof(short), 1, outfile);
-	fwrite(&bmpheader.reserved2, sizeof(short), 1, outfile);
-	fwrite(&bmpheader.bitmap_dataoffset, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.bitmap_headersize, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.width, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.height, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.planes, sizeof(short), 1, outfile);
-	fwrite(&bmpheader.bits_perpixel, sizeof(short), 1, outfile);
-	fwrite(&bmpheader.compression, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.bitmap_datasize, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.hresolution, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.vresolution, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.usedcolors, sizeof(int), 1, outfile);
-	fwrite(&bmpheader.importantcolors, sizeof(int), 1, outfile);
-
 	for (x = 0; x<bmpheader.height; x++)
 	{
 		for (y = 0; y<bmpheader.width; y++)
 		{
-			if (y < 0 && x < 0) 
-			{ // 讓 x<300 和 y<400 的像素為零
-				RGB[x][y].B = 0;
-				RGB[x][y].G = 0;
-				RGB[x][y].R = 0;
-			}
-
-			fwrite(&RGB[x][y].B, sizeof(char), 1, outfile);
-			fwrite(&RGB[x][y].G, sizeof(char), 1, outfile);
-			fwrite(&RGB[x][y].R, sizeof(char), 1, outfile);
-
 			fprintf(out_R,"%d ",RGB[x][y].R);
 			fprintf(out_G,"%d ",RGB[x][y].G);
 			fprintf(out_B,"%d ",RGB[x][y].B);
-
-			if (x < 9 && y < 8) printf("%02x%02x%02x ", RGB[x][y].R, RGB[x][y].G, RGB[x][y].B); // DEBUG
 		}
-		if (skip != 0) { fwrite(skip_buf, skip, 1, outfile); }
-		if (x < 9) printf("\n"); // DEBUG
 		fprintf(out_R,"\n");
 		fprintf(out_G,"\n");
 		fprintf(out_B,"\n");
@@ -340,7 +307,6 @@ void rgb2ycbcr(ImgRGB **array, int H, int W)
             float Cb = -0.1687 * R - 0.3313 * G + 0.5 * B + 128;
             float Cr = 0.5 * R - 0.4187 * G - 0.0813 * B + 128;
 
-            // 量化 Y、Cb、Cr 值
             array[i][j].R = (unsigned char)Y;
             array[i][j].G = (unsigned char)Cb;
             array[i][j].B = (unsigned char)Cr;
@@ -348,7 +314,7 @@ void rgb2ycbcr(ImgRGB **array, int H, int W)
     }
 }
 
-// function to calculate the DCT coefficient
+// 計算DCT係數
 double C(int x) 
 {
     if (x == 0)
@@ -357,34 +323,36 @@ double C(int x)
         return sqrt(2.0 / N);
 }
 
-// function to perform 2D DCT on an 8x8 matrix
+// 每8*8的matrix做2D DCT
 void dct(double matrix[N][N], double result[N][N]) 
 {
     int i, j, k, l;
 
     // loop through the rows and columns of the result matrix
-    for (i = 0; i < N; i++) {
-        for (j = 0; j < N; j++) {
+    for (i = 0; i < N; i++) 
+	{
+        for (j = 0; j < N; j++) 
+		{
 
-            // initialize the sum to zero
+            // initialize the sum to zero 
             double sum = 0;
 
             // loop through the rows and columns of the input matrix
-            for (k = 0; k < N; k++) {
-                for (l = 0; l < N; l++) {
-
+            for (k = 0; k < N; k++) 
+			{
+                for (l = 0; l < N; l++) 
+				{
                     // multiply the input matrix element with the cosine factors and add to the sum
                     sum += matrix[k][l] * cos((2 * k + 1) * i * PI / (2 * N)) * cos((2 * l + 1) * j * PI / (2 * N));
                 }
             }
-
             // multiply the sum with the DCT coefficient and store in the result matrix
             result[i][j] = C(i) * C(j) * sum;
         }
     }
 }
 
-// function to perform 2D DCT on an 8x8 matrix
+// DCT and quantization
 void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out_Qt_Cr,FILE* out_qF_Y,FILE* out_qF_Cb,FILE* out_qF_Cr,FILE* out_eF_Y,FILE* out_eF_Cb,FILE* out_eF_Cr) 
 {
     int i, j, a, b, c, d;
@@ -432,9 +400,9 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 	{
 		for(j = 0;j < N;j++)
 		{
-			fprintf(out_Qt_Y,"%d ",quantizationTable_Y[i][j]);
-			fprintf(out_Qt_Cb,"%d ",quantizationTable_CbCr[i][j]);
-			fprintf(out_Qt_Cr,"%d ",quantizationTable_CbCr[i][j]);	
+			fprintf(out_Qt_Y,"%d ",quantizationTable_Y[i][j]);		//印出量化表
+			fprintf(out_Qt_Cb,"%d ",quantizationTable_CbCr[i][j]);		//印出量化表
+			fprintf(out_Qt_Cr,"%d ",quantizationTable_CbCr[i][j]);		//印出量化表	
 		}
 		fprintf(out_Qt_Y,"\n");
 		fprintf(out_Qt_Cb,"\n");
@@ -463,7 +431,7 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 				}
 			}
 
-			dct (matrix_R, result_R);
+			dct (matrix_R, result_R);	//DCT
 			dct (matrix_G, result_G);
 			dct (matrix_B, result_B);
 			
@@ -471,19 +439,19 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 			{
 				for(d=0;d<N;d++)
 				{
-					temp_Y[c][d]=result_R[c][d];
+					temp_Y[c][d]=result_R[c][d];		//暫存DCT結果
 					temp_Cb[c][d]=result_G[c][d];
 					temp_Cr[c][d]=result_B[c][d];
 				}
 			}
 			
-			quantize(result_R, quantizationTable_Y,quantize_result_Y);
+			quantize(result_R, quantizationTable_Y,quantize_result_Y);		//quantize
             quantize(result_G, quantizationTable_CbCr,quantize_result_Cb);
             quantize(result_B, quantizationTable_CbCr,quantize_result_Cr);
 
 			for(c=0;c<N;c++)
 			{
-				for(d=0;d<N;d++)
+				for(d=0;d<N;d++)		//quantize error
 				{
 					error_Y[c][d]=temp_Y[c][d]-quantize_result_Y[c][d]*quantizationTable_Y[c][d];
 					error_Cb[c][d]=temp_Cb[c][d]-quantize_result_Cb[c][d]*quantizationTable_CbCr[c][d];
@@ -495,7 +463,7 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 			{
 				for (b = 0; b < N; b++)
 				{
-					fwrite(&(quantize_result_Y[a][b]), sizeof(short), 1, out_qF_Y);
+					fwrite(&(quantize_result_Y[a][b]), sizeof(short), 1, out_qF_Y);		//印出量化結果
 					fwrite(&(quantize_result_Cb[a][b]), sizeof(short), 1, out_qF_Cb);
 					fwrite(&(quantize_result_Cr[a][b]), sizeof(short), 1, out_qF_Cr);
 				}
@@ -505,7 +473,7 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 			{
 				for (b = 0; b < N; b++)
 				{
-					fwrite(&(error_Y[a][b]), sizeof(double), 1, out_eF_Y);
+					fwrite(&(error_Y[a][b]), sizeof(double), 1, out_eF_Y);		//印出量化誤差
 					fwrite(&(error_Cb[a][b]), sizeof(double), 1, out_eF_Cb);
 					fwrite(&(error_Cr[a][b]), sizeof(double), 1, out_eF_Cr);
 				}
@@ -515,7 +483,7 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 
 }
 
-// function to quantize the DCT coefficients
+// quantize
 void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]) 
 {
     for (int i = 0; i < N; i++) 

@@ -5,29 +5,28 @@
 float PI = 3.14159265359;
 #define N 8 // matrix size
 
-/* 定義 BMP 標頭的結構 */
+// 定義 BMP 標頭的結構,54
 typedef struct Bmpheader 
 {
-	char identifier[2];             // BMP 檔案標識，0x0000
-	unsigned int filesize;          // 檔案大小，0x0002
-	unsigned short reserved;        // 保留字段，0x0006
-	unsigned short reserved2;
-	unsigned int bitmap_dataoffset; // 位圖數據的偏移，0x000A
-	unsigned int bitmap_headersize; // 位圖標頭的大小，0x000E
-	unsigned int width;             // 影像寬度，0x0012
-	unsigned int height;            // 影像高度，0x0016
-	unsigned short planes;          // 圖像的位平面數，0x001A
-	unsigned short bits_perpixel;   // 每像素位元數，0x001C
-	unsigned int compression;       // 圖像壓縮方式，0x001E
-	unsigned int bitmap_datasize;   // 位圖數據的大小，0x0022
-	unsigned int hresolution;       // 水平分辨率，0x0026
-	unsigned int vresolution;       // 垂直分辨率，0x002A
-	unsigned int usedcolors;        // 使用的顏色索引數，0x002E
-	unsigned int importantcolors;   // 重要的顏色索引數，0x0032
-	unsigned int palette;           // 調色板，0x0036
+	char identifier[2];             // BMP 檔案標識,2
+	unsigned int filesize;          // 檔案大小,4
+	unsigned short reserved;        // 保留字段,2
+	unsigned short reserved2;		//2
+	unsigned int bitmap_dataoffset; // 位圖數據的偏移,4
+	unsigned int bitmap_headersize; // 位圖標頭的大小,4
+	unsigned int width;             // 影像寬度,4
+	unsigned int height;            // 影像高度,4
+	unsigned short planes;          // 圖像的位平面數,2
+	unsigned short bits_perpixel;   // 每像素位元數,2
+	unsigned int compression;       // 圖像壓縮方式,4
+	unsigned int bitmap_datasize;   // 位圖數據的大小,4
+	unsigned int hresolution;       // 水平分辨率,4
+	unsigned int vresolution;       // 垂直分辨率,4
+	unsigned int usedcolors;        // 使用的顏色索引數,4
+	unsigned int importantcolors;   // 重要的顏色索引數,4
 } Bitmap;
 
-/* 定義 RGB 結構 */
+// 定義 RGB 結構
 typedef struct RGB 
 {
 	unsigned char R;
@@ -44,7 +43,6 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
 void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, int H, int W);
 void ycbcr2rgb(ImgRGB **array, int H, int W); 
 void idct(short matrix[N][N], double result[N][N]);
-void img_idct(ImgRGB **array,int H,int W,FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr);
 void inverse_quantization(short matrix[N][N], int inverse_quantization_table[N][N]);
 
 int main(int argc, char **argv) 
@@ -55,6 +53,9 @@ int main(int argc, char **argv)
 	char output_R[100];
 	char output_G[100];
 	char output_B[100]; 
+	char output_Qt_Y[100];
+	char output_Qt_Cb[100];
+	char output_Qt_Cr[100];
 	char output_qF_Y[100];
 	char output_qF_Cb[100];
 	char output_qF_Cr[100];
@@ -69,6 +70,8 @@ int main(int argc, char **argv)
 
 	method=atoi(argv[1]);
 	strcpy(inputbmp,argv[2]);
+
+	//function 0
 	if(method == 0)
 	{
 		strcpy(output_R,argv[3]);
@@ -77,11 +80,25 @@ int main(int argc, char **argv)
 		strcpy(output_size,argv[6]);
 	}
 
+	//function 1a
+	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") != 0)
+	{
+		strcpy(original,argv[3]);
+		strcpy(output_Qt_Y,argv[4]);
+		strcpy(output_Qt_Cb,argv[5]);
+		strcpy(output_Qt_Cr,argv[6]);
+		strcpy(output_size,argv[7]);
+		strcpy(output_qF_Y,argv[8]);
+		strcpy(output_qF_Cb,argv[9]);
+		strcpy(output_qF_Cr,argv[10]);
+	}
+
+	//function 1b
 	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") == 0)
 	{
-		strcpy(output_R,argv[3]);
-		strcpy(output_G,argv[4]);
-		strcpy(output_B,argv[5]);
+		strcpy(output_Qt_Y,argv[3]);
+		strcpy(output_Qt_Cb,argv[4]);
+		strcpy(output_Qt_Cr,argv[5]);
 		strcpy(output_size,argv[6]);
 		strcpy(output_qF_Y,argv[7]);
 		strcpy(output_qF_Cb,argv[8]);
@@ -91,17 +108,6 @@ int main(int argc, char **argv)
 		strcpy(output_eF_Cr,argv[12]);
 	}
 	
-	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") != 0)
-	{
-		strcpy(original,argv[3]);
-		strcpy(output_R,argv[4]);
-		strcpy(output_G,argv[5]);
-		strcpy(output_B,argv[6]);
-		strcpy(output_size,argv[7]);
-		strcpy(output_qF_Y,argv[8]);
-		strcpy(output_qF_Cb,argv[9]);
-		strcpy(output_qF_Cr,argv[10]);
-	}
 	// 開啟輸出檔案
 	fp_out = fopen(inputbmp, "wb");
 	if (fp_out) printf("Open %s as output file!\n", inputbmp);
@@ -111,7 +117,7 @@ int main(int argc, char **argv)
 
 	int H,W;
 	FILE* fp_size=fopen(output_size,"r");
-	fscanf(fp_size, "%d", &bmpheader.height);
+	fscanf(fp_size, "%d", &bmpheader.height);		//讀取bmp的height跟width
 	fscanf(fp_size, "%d", &bmpheader.width);
 	H=bmpheader.height;
 	W=bmpheader.width;
@@ -127,10 +133,10 @@ int main(int argc, char **argv)
 	int block_W = W / 8;
 	if (W % 8 != 0) block_W++;
 
-	// 设置 BMP 文件头字段
+	// 設定BMP的標頭檔
 	bmpheader.identifier[0] = 'B';
 	bmpheader.identifier[1] = 'M';
-	bmpheader.filesize = 54 + H * W * 3; // 54 字节的头部 + 像素数据
+	bmpheader.filesize = 54 + H * W * 3; //54個標頭檔跟數據大小
 	bmpheader.reserved = 0;
 	bmpheader.reserved2 = 0;
 	bmpheader.bitmap_dataoffset = 54;
@@ -138,13 +144,13 @@ int main(int argc, char **argv)
 	bmpheader.width = W;
 	bmpheader.height = H;
 	bmpheader.planes = 1;
-	bmpheader.bits_perpixel = 24; // 24位彩色图
-	bmpheader.compression = 0;    // 不压缩
+	bmpheader.bits_perpixel = 24; 
+	bmpheader.compression = 0;    
 	bmpheader.bitmap_datasize = 3296040;
-	bmpheader.hresolution = 2835; // 像素每米（可根据需要调整）
-	bmpheader.vresolution = 2835; // 像素每米（可根据需要调整）
-	bmpheader.usedcolors = 0;     // 使用的颜色数（0 表示所有颜色）
-	bmpheader.importantcolors = 0; // 重要的颜色数（0 表示所有颜色）
+	bmpheader.hresolution = 2835; // 每米像素
+	bmpheader.vresolution = 2835; // 每米像素
+	bmpheader.usedcolors = 0;     
+	bmpheader.importantcolors = 0; 
 
 	printf("Image size: Width: %d x Height=%d pixels, total %d bytes\n", W, H, W*H * 3);
 	printf("Image line skip=%d bytes\n", skip);
@@ -158,6 +164,7 @@ int main(int argc, char **argv)
 		FILE *fp_R = fopen(output_R, "r");
 		FILE *fp_G = fopen(output_G, "r");
 		FILE *fp_B = fopen(output_B, "r");
+
 		// 分配二維記憶體空間，用於儲存 RGB 數據
 		ImgRGB **Data_RGB = malloc_2D(H,W);
 		InputData_0(fp_R, fp_G, fp_B, Data_RGB, H, W);
@@ -181,8 +188,11 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	if(method == 1 && strcmp(inputbmp,"ResKimberly.bmp") == 0)
+	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") == 0)
 	{
+		FILE* fp_qt_Y=fopen(output_Qt_Y,"r");
+		FILE* fp_qt_Cb=fopen(output_Qt_Cb,"r");
+		FILE* fp_qt_Cr=fopen(output_Qt_Cr,"r");
 		FILE* fp_qF_Y=fopen(output_qF_Y,"rb");
 		FILE* fp_qF_Cb=fopen(output_qF_Cb,"rb");
 		FILE* fp_qF_Cr=fopen(output_qF_Cr,"rb");
@@ -194,25 +204,25 @@ int main(int argc, char **argv)
 		// 分配二維記憶體空間，用於儲存 RGB 數據
 		ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
 		InputData_1(fp_qF_Y,fp_qF_Cb,fp_qF_Cr,fp_eF_Y,fp_eF_Cb,fp_eF_Cr, Data_RGB, H, W);
-		//fclose(fp_in);
 
 		printf("Data size loaded: %d bytes\n", H*W * 3);
 
 		
-		// 對輸入資料進行ycbcr2rgb
-		//img_idct(Data_RGB, H, W,fp_qF_Y,fp_qF_Cb,fp_qF_Cr);
+		// 對輸入資料進行ycbcr2rgb;
 		ycbcr2rgb(Data_RGB, H, W);
 
 		// 輸出 BMP 檔案
 		output_bmp(Data_RGB, fp_out, bmpheader, skip);
-		printf("\n"); // DEBUG
 
-		printf("Output decompressed image to: %s\n\n", inputbmp);
+		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
 
 		// 釋放記憶體並關閉檔案
 		free(Data_RGB[0]);
 		free(Data_RGB);
 		fclose(fp_out);
+		fclose(fp_qt_Y);
+		fclose(fp_qt_Cb);
+		fclose(fp_qt_Cr);
 		fclose(fp_qF_Y);
 		fclose(fp_qF_Cb);
 		fclose(fp_qF_Cr);
@@ -224,8 +234,11 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	if(method == 1 && strcmp(inputbmp,"ResKimberly.bmp") != 0)
+	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") != 0)
 	{
+		FILE* fp_qt_Y=fopen(output_Qt_Y,"r");
+		FILE* fp_qt_Cb=fopen(output_Qt_Cb,"r");
+		FILE* fp_qt_Cr=fopen(output_Qt_Cr,"r");
 		FILE* fp_qF_Y=fopen(output_qF_Y,"rb");
 		FILE* fp_qF_Cb=fopen(output_qF_Cb,"rb");
 		FILE* fp_qF_Cr=fopen(output_qF_Cr,"rb");
@@ -234,25 +247,25 @@ int main(int argc, char **argv)
 		// 分配二維記憶體空間，用於儲存 RGB 數據
 		ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
 		InputData_1_q(fp_qF_Y,fp_qF_Cb,fp_qF_Cr, Data_RGB, H, W);
-		//fclose(fp_in);
 
 		printf("Data size loaded: %d bytes\n", H*W * 3);
 
 		
 		// 對輸入資料進行ycbcr2rgb
-		//img_idct(Data_RGB, H, W,fp_qF_Y,fp_qF_Cb,fp_qF_Cr);
 		ycbcr2rgb(Data_RGB, H, W);
 
 		// 輸出 BMP 檔案
 		output_bmp(Data_RGB, fp_out, bmpheader, skip);
-		printf("\n"); // DEBUG
 
-		printf("Output decompressed image to: %s\n\n", inputbmp);
+		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
 
 		// 釋放記憶體並關閉檔案
 		free(Data_RGB[0]);
 		free(Data_RGB);
 		fclose(fp_out);
+		fclose(fp_qt_Y);
+		fclose(fp_qt_Cb);
+		fclose(fp_qt_Cr);
 		fclose(fp_qF_Y);
 		fclose(fp_qF_Cb);
 		fclose(fp_qF_Cr);
@@ -260,8 +273,6 @@ int main(int argc, char **argv)
 		printf("Job done!\n");
 		return 0;
 	}
-
-	
 }
 
 // 分配二維記憶體空間的函數
@@ -337,7 +348,7 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
 			{
 				for(n=0;n<N;n++)
 				{
-					fread(&block_Y[m][n], sizeof(short), 1, fp_qF_Y);
+					fread(&block_Y[m][n], sizeof(short), 1, fp_qF_Y);		//讀取結果跟量化誤差
 					fread(&block_Cb[m][n], sizeof(short), 1, fp_qF_Cb);
 					fread(&block_Cr[m][n], sizeof(short), 1, fp_qF_Cr);
 					fread(&error_Y[m][n], sizeof(double), 1, fp_eF_Y);
@@ -345,16 +356,13 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
 					fread(&error_Cr[m][n], sizeof(double), 1, fp_eF_Cr);					
 				}
 			}
-            // // 讀取每個8x8的壓縮塊
-            // fread(block_Y, sizeof(double), 64, fp_qF_Y);
-            // fread(block_Cb, sizeof(double), 64, fp_qF_Cb);
-            // fread(block_Cr, sizeof(double), 64, fp_qF_Cr);
 
             // 進行逆量化
             inverse_quantization(block_Y,inverse_quantizationTable_Y);
 			inverse_quantization(block_Cb,inverse_quantizationTable_CbCr);
 			inverse_quantization(block_Cr,inverse_quantizationTable_CbCr);
 
+			//加上量化誤差
 			for (m = 0; m < 8 && (i + m) < H; m++) 
 			{
                 for (n = 0; n < 8 && (j + n) < W; n++) 
@@ -378,9 +386,6 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
                     array[i + m][j + n].R = (unsigned char) idct_Y[m][n];
                     array[i + m][j + n].G = (unsigned char) idct_Cb[m][n];
                     array[i + m][j + n].B = (unsigned char) idct_Cr[m][n];
-
-                    // YCbCr到RGB的轉換（如果有必要）
-                    // ycbcrToRgb(&array[i + m][j + n]);
                 }
             }
         }
@@ -392,6 +397,7 @@ void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, 
     short block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
     double idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
     int i, j, m, n;
+	//Y量化table
 	int inverse_quantizationTable_Y[N][N] = 
 	{
 		{16, 11, 10, 16, 24, 40, 51, 61},
@@ -403,6 +409,7 @@ void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, 
 		{49, 64, 78, 87, 103, 121, 120, 101},
 		{72, 92, 95, 98, 112, 100, 103, 99}
 	};
+	//CbCr量化table
 	int inverse_quantizationTable_CbCr[N][N] = 
 	{
 		{17, 18, 24, 47, 99, 99, 99, 99},
@@ -424,15 +431,11 @@ void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, 
 			{
 				for(n=0;n<N;n++)
 				{
-					fread(&block_Y[m][n], sizeof(short), 1, fp_qF_Y);
+					fread(&block_Y[m][n], sizeof(short), 1, fp_qF_Y);		//讀取結果
 					fread(&block_Cb[m][n], sizeof(short), 1, fp_qF_Cb);
 					fread(&block_Cr[m][n], sizeof(short), 1, fp_qF_Cr);					
 				}
 			}
-            // // 讀取每個8x8的壓縮塊
-            // fread(block_Y, sizeof(double), 64, fp_qF_Y);
-            // fread(block_Cb, sizeof(double), 64, fp_qF_Cb);
-            // fread(block_Cr, sizeof(double), 64, fp_qF_Cr);
 
             // 進行逆量化
             inverse_quantization(block_Y,inverse_quantizationTable_Y);
@@ -453,9 +456,6 @@ void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, 
                     array[i + m][j + n].R = (unsigned char) idct_Y[m][n];
                     array[i + m][j + n].G = (unsigned char) idct_Cb[m][n];
                     array[i + m][j + n].B = (unsigned char) idct_Cr[m][n];
-
-                    // YCbCr到RGB的轉換（如果有必要）
-                    // ycbcrToRgb(&array[i + m][j + n]);
                 }
             }
         }
@@ -527,7 +527,7 @@ void ycbcr2rgb(ImgRGB **array, int H, int W)
     }
 }
 
-// function to calculate the DCT coefficient
+//計算DCT係數
 double C(int x) 
 {
     if (x == 0)
@@ -536,6 +536,7 @@ double C(int x)
         return sqrt(2.0 / N);
 }
 
+// inverse DCT
 void idct(short matrix[N][N], double result[N][N]) 
 {
     int i, j, k, l;
@@ -566,12 +567,11 @@ void idct(short matrix[N][N], double result[N][N])
     }
 }
 
-
+// inverse quantize
 void inverse_quantization(short matrix[N][N], int inverse_quantization_table[N][N]) 
 {
     int i, j;
 
-    // 逆量化
     for (i = 0; i < N; i++) 
     {
         for (j = 0; j < N; j++) 
