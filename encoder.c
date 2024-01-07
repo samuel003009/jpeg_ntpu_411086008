@@ -47,6 +47,12 @@ void dct(double matrix[N][N], double result[N][N]);
 void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out_Qt_Cr,FILE* out_qF_Y,FILE* out_qF_Cb,FILE* out_qF_Cr,FILE* out_eF_Y,FILE* out_eF_Cb,FILE* out_eF_Cr);
 void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]);
 
+//function 2
+void dpcm(short dct_result[N][N], short dpcm_result[N][N], short* previousDC, FILE* fp_dpcm);
+void zigzag(short dct_result[N][N],short zigzag_result[N*N]);
+void runLengthEncode(short zigzag_result[N * N],FILE* fp_rle);
+void img_rle(ImgRGB **array,int H,int W,FILE* out_rle);
+
 int main(int argc, char **argv, ImgRGB **array) 
 {
 	int method;
@@ -66,6 +72,8 @@ int main(int argc, char **argv, ImgRGB **array)
 	char eF_Cr[100];
 	int i, j, x, y ,a ,b;
 	double matrix[N][N];
+	char mode[100];
+	char rle_ascii[100];
 	FILE* fp_in;
 	FILE* fp_R;
 	FILE* fp_G;
@@ -80,6 +88,7 @@ int main(int argc, char **argv, ImgRGB **array)
 	FILE* fp_eF_Y;
 	FILE* fp_eF_Cb;
 	FILE* fp_eF_Cr;
+	FILE* fp_rle_ascii;
 
 	method=atoi(argv[1]);
 	strcpy(inputbmp,argv[2]);
@@ -125,6 +134,12 @@ int main(int argc, char **argv, ImgRGB **array)
 		fp_eF_Cr=fopen(eF_Cr,"wb");
 	}
 
+	if(method == 2)
+	{
+		strcpy(mode,argv[3]);
+		strcpy(rle_ascii,argv[4]);
+		fp_rle_ascii=fopen(rle_ascii,"w");
+	}
 	// 讀取 BMP 標頭
 	Bitmap bmpheader;
 	readheader(fp_in, &bmpheader);
@@ -133,7 +148,15 @@ int main(int argc, char **argv, ImgRGB **array)
 	int H = bmpheader.height;
 	int W = bmpheader.width;
 
-	fprintf(fp_dim,"%d %d",H,W);
+	if(method == 0 || method == 1)
+	{
+		fprintf(fp_dim,"%d %d",H,W);
+	}
+	else
+	{
+		fprintf(fp_rle_ascii,"%d %d\n",H,W);
+	}
+
 
 	// 跳過每行結尾的填充（padding）
 	int skip = (4 - (bmpheader.width * 3) % 4);
@@ -195,6 +218,19 @@ int main(int argc, char **argv, ImgRGB **array)
 		return 0;
 	}
 
+	if(method == 2)
+	{
+		rgb2ycbcr(Data_RGB, H, W);
+		img_rle(Data_RGB, H, W,fp_rle_ascii);
+
+		// 釋放記憶體並關閉檔案
+		free(Data_RGB[0]);
+		free(Data_RGB);
+		fclose(fp_rle_ascii);
+
+		printf("Job done!\n");
+		return 0;
+	}
 }
 
 // 讀取 BMP 標頭的函數
@@ -483,6 +519,138 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 
 }
 
+
+
+void img_rle(ImgRGB **array,int H,int W,FILE* out_rle) 
+{
+    int i, j, a, b, c, d;
+	double matrix_R[N][N];
+	double result_R[N][N];
+	double matrix_G[N][N];
+	double result_G[N][N];
+	double matrix_B[N][N];
+	double result_B[N][N];
+	double temp_Y[N][N];
+	double temp_Cb[N][N];
+	double temp_Cr[N][N];
+	double error_Y[N][N];
+	double error_Cb[N][N];
+	double error_Cr[N][N];
+	short quantize_result_Y[N][N];
+	short quantize_result_Cb[N][N];
+	short quantize_result_Cr[N][N];
+
+	int quantizationTable_Y[N][N] = 
+	{
+		{16, 11, 10, 16, 24, 40, 51, 61},
+		{12, 12, 14, 19, 26, 58, 60, 55},
+		{14, 13, 16, 24, 40, 57, 69, 56},
+		{14, 17, 22, 29, 51, 87, 80, 62},
+		{18, 22, 37, 56, 68, 109, 103, 77},
+		{24, 35, 55, 64, 81, 104, 113, 92},
+		{49, 64, 78, 87, 103, 121, 120, 101},
+		{72, 92, 95, 98, 112, 100, 103, 99}
+	};
+	int quantizationTable_CbCr[N][N] = 
+	{
+		{17, 18, 24, 47, 99, 99, 99, 99},
+		{18, 21, 26, 66, 99, 99, 99, 99},
+		{24, 26, 56, 99, 99, 99, 99, 99},
+		{47, 66, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99}
+	};
+
+	short dpcm_result_Y[N][N];
+	short dpcm_result_Cb[N][N];
+	short dpcm_result_Cr[N][N];
+
+	short zigzag_result_Y[N * N];
+	short zigzag_result_Cb[N * N];
+	short zigzag_result_Cr[N * N];
+
+    short rle_result_Y[N*N]={0};
+    short rle_result_Cb[N*N]={0};
+    short rle_result_Cr[N*N]={0};
+
+	short previousDC = 0;
+
+    for (i = 0; i < H; i+=8) 
+	{
+        for (j = 0; j < W; j+=8) 
+		{
+			for (a = 0; a < N; a++)
+			{
+				for (b = 0; b < N; b++)
+				{
+					if (((i+a) < H) && ((j+b) < W))
+					{
+						matrix_R[a][b] = (double) array[i+a][j+b].R;
+						matrix_G[a][b] = (double) array[i+a][j+b].G;
+						matrix_B[a][b] = (double) array[i+a][j+b].B;
+					}
+					else
+					{
+						matrix_R[a][b] = (double) 0;
+						matrix_G[a][b] = (double) 0;
+						matrix_B[a][b] = (double) 0;
+					}
+				}
+			}
+
+			dct (matrix_R, result_R);
+			dct (matrix_G, result_G);
+			dct (matrix_B, result_B);
+			
+			for(c=0;c<N;c++)
+			{
+				for(d=0;d<N;d++)
+				{
+					temp_Y[c][d]=result_R[c][d];
+					temp_Cb[c][d]=result_G[c][d];
+					temp_Cr[c][d]=result_B[c][d];
+				}
+			}
+			
+			quantize(result_R, quantizationTable_Y,quantize_result_Y);
+            quantize(result_G, quantizationTable_CbCr,quantize_result_Cb);
+            quantize(result_B, quantizationTable_CbCr,quantize_result_Cr);
+
+			for(c=0;c<N;c++)
+			{
+				for(d=0;d<N;d++)
+				{
+					error_Y[c][d]=temp_Y[c][d]-quantize_result_Y[c][d]*quantizationTable_Y[c][d];
+					error_Cb[c][d]=temp_Cb[c][d]-quantize_result_Cb[c][d]*quantizationTable_CbCr[c][d];
+					error_Cr[c][d]=temp_Cr[c][d]-quantize_result_Cr[c][d]*quantizationTable_CbCr[c][d];
+				}
+			}
+
+			
+
+			
+
+			// dpcm(quantize_result_Y, dpcm_result_Y,&previousDC,out_dpcm);
+			// dpcm(quantize_result_Cb, dpcm_result_Cb,&previousDC,out_dpcm);
+			// dpcm(quantize_result_Cr, dpcm_result_Cr,&previousDC,out_dpcm);
+
+			zigzag(quantize_result_Y,zigzag_result_Y);
+			zigzag(quantize_result_Cb,zigzag_result_Cb);
+			zigzag(quantize_result_Cr,zigzag_result_Cr);
+
+
+            runLengthEncode(zigzag_result_Y,out_rle);
+			runLengthEncode(zigzag_result_Cb,out_rle);
+			runLengthEncode(zigzag_result_Cr,out_rle);
+
+
+		}
+	}
+
+}
+
 // quantize
 void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]) 
 {
@@ -493,4 +661,72 @@ void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantiz
             quantize_result[i][j] = round(dct_result[i][j] / quantizationTable[i][j]);
         }
     }
+}
+
+void dpcm(short dct_result[N][N], short dpcm_result[N][N], short* previousDC, FILE* fp_dpcm) 
+{
+    // 處理第一個元素（DC分量）
+    short currentDC = dct_result[0][0];
+    dpcm_result[0][0] = currentDC - *previousDC;
+    fprintf(fp_dpcm,"%d ", dpcm_result[0][0]);
+
+    // 更新上一個DC分量
+    *previousDC = currentDC;
+
+    // 處理其餘元素（AC分量）
+    for (int i = 1; i < N; i++) 
+    {
+        for (int j = 1; j < N; j++) 
+        {
+            dpcm_result[i][j] = dct_result[i][j];
+        }
+    }
+}
+
+void zigzag(short dct_result[N][N],short zigzag_result[N * N])
+{
+	
+	int min=dct_result[0][0];
+	int zigzag[N][N] = 
+    {
+        {0, 1, 5, 6, 14, 15, 27, 28},
+        {2, 4, 7, 13, 16, 26, 29, 42},
+        {3, 8, 12, 17, 25, 30, 41, 43},
+        {9, 11, 18, 24, 31, 40, 44, 53},
+        {10, 19, 23, 32, 39, 45, 52, 54},
+        {20, 22, 33, 38, 46, 51, 55, 60},
+        {21, 34, 37, 47, 50, 56, 59, 61},
+        {35, 36, 48, 49, 57, 58, 62, 63},
+	};
+
+	for(int i=0;i<N;i++)
+	{
+		for(int j=0;j<N;j++)
+		{
+			zigzag_result[zigzag[i][j]]= (short) dct_result[i][j];
+		}
+	}
+	
+}
+
+void runLengthEncode(short zigzag_result[N * N],FILE* fp_rle) 
+{
+    int length = N*N;
+	//fprintf(fp_rle,"(%d,%d,%s)",row,column,ycbcr);
+	fprintf(fp_rle,"%d ",zigzag_result[0]);
+    for (int i = 1; i < length; i++) 
+	{
+        // Count occurrences of the current character
+        unsigned char count = 1;
+        while (i < length - 1 && zigzag_result[i] == zigzag_result[i + 1]) 
+		{
+            count++;
+            i++;
+        }
+
+        // Print the character and its count
+        fprintf(fp_rle,"%d %d ", zigzag_result[i], count);
+    }
+	fprintf(fp_rle,"\n");
+
 }

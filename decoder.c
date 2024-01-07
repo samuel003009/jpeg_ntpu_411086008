@@ -34,16 +34,23 @@ typedef struct RGB
 	unsigned char B;
 } ImgRGB;
 
+//function 0
 void readheader(FILE* fp, Bitmap *x);
 ImgRGB** malloc_2D(int row, int col);
 void InputData_0(FILE* fp_R, FILE* fp_G, FILE* fp_B, ImgRGB **array, int H, int W);
 void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip);
 
+//function 1
 void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE* fp_eF_Cb,FILE* fp_eF_Cr, ImgRGB **array, int H, int W);
 void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, int H, int W);
 void ycbcr2rgb(ImgRGB **array, int H, int W); 
 void idct(short matrix[N][N], double result[N][N]);
 void inverse_quantization(short matrix[N][N], int inverse_quantization_table[N][N]);
+
+//function 2
+void inverse_zigzag(short zigzag_result[N * N],short dct_result[N][N]);
+void runLengthDecode(short *encoded, short zigzag_result[N * N]);
+void InputData_2(ImgRGB **array, int H, int W,FILE* fp_inverserle);
 
 int main(int argc, char **argv) 
 {
@@ -63,6 +70,8 @@ int main(int argc, char **argv)
 	char output_eF_Cb[100];
 	char output_eF_Cr[100];
 	char output_size[100]; 
+	int mode;
+	char rle_ascii[100];
 	int i, j, x, y ,a ,b;
 	double matrix[N][N];
 	double block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
@@ -108,6 +117,11 @@ int main(int argc, char **argv)
 		strcpy(output_eF_Cr,argv[12]);
 	}
 	
+	if(method == 2)
+	{
+		mode=atoi(argv[3]);
+		strcpy(rle_ascii,argv[4]);
+	}
 	// 開啟輸出檔案
 	fp_out = fopen(inputbmp, "wb");
 	if (fp_out) printf("Open %s as output file!\n", inputbmp);
@@ -116,9 +130,20 @@ int main(int argc, char **argv)
 	Bitmap bmpheader;
 
 	int H,W;
-	FILE* fp_size=fopen(output_size,"r");
-	fscanf(fp_size, "%d", &bmpheader.height);		//讀取bmp的height跟width
-	fscanf(fp_size, "%d", &bmpheader.width);
+	if(method == 0 || method == 1)
+	{
+		FILE* fp_size=fopen(output_size,"r");
+		fscanf(fp_size, "%d", &bmpheader.height);		//讀取bmp的height跟width
+		fscanf(fp_size, "%d", &bmpheader.width);
+		fclose(fp_size);
+	}
+	else
+	{
+		FILE* fp_rle_ascii=fopen(rle_ascii,"r");
+		fscanf(fp_rle_ascii, "%d", &bmpheader.height);		//讀取bmp的height跟width
+		fscanf(fp_rle_ascii, "%d", &bmpheader.width);
+		fclose(fp_rle_ascii);
+	}
 	H=bmpheader.height;
 	W=bmpheader.width;
 
@@ -182,7 +207,7 @@ int main(int argc, char **argv)
 		fclose(fp_R);
 		fclose(fp_G);
 		fclose(fp_B);
-		fclose(fp_size);
+		
 
 		printf("Job done!\n");
 		return 0;
@@ -270,6 +295,30 @@ int main(int argc, char **argv)
 		fclose(fp_qF_Cb);
 		fclose(fp_qF_Cr);
 
+		printf("Job done!\n");
+		return 0;
+	}
+
+	if(method == 2)
+	{
+		FILE* fp_rle_ascii=fopen(rle_ascii,"r");
+		// 分配二維記憶體空間，用於儲存 RGB 數據
+		ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
+		InputData_2(Data_RGB, H, W,fp_rle_ascii);
+
+		printf("Data size loaded: %d bytes\n", H*W * 3);
+
+		
+		// 對輸入資料進行ycbcr2rgb
+		ycbcr2rgb(Data_RGB, H, W);
+
+		// 輸出 BMP 檔案
+		output_bmp(Data_RGB, fp_out, bmpheader, skip);
+
+		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
+
+		fclose(fp_rle_ascii);
+		fclose(fp_out);
 		printf("Job done!\n");
 		return 0;
 	}
@@ -462,6 +511,261 @@ void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, 
     }
 }
 
+void InputData_2(ImgRGB **array, int H, int W,FILE* fp_inverserle) 
+{
+    short block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
+	short block_Y_1[8][8], block_Cb_1[8][8], block_Cr_1[8][8];
+	double error_Y[8][8],error_Cb[8][8],error_Cr[8][8];
+    double idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
+    int i, j, m, n;
+	int inverse_quantizationTable_Y[N][N] = 
+	{
+		{16, 11, 10, 16, 24, 40, 51, 61},
+		{12, 12, 14, 19, 26, 58, 60, 55},
+		{14, 13, 16, 24, 40, 57, 69, 56},
+		{14, 17, 22, 29, 51, 87, 80, 62},
+		{18, 22, 37, 56, 68, 109, 103, 77},
+		{24, 35, 55, 64, 81, 104, 113, 92},
+		{49, 64, 78, 87, 103, 121, 120, 101},
+		{72, 92, 95, 98, 112, 100, 103, 99}
+	};
+	int inverse_quantizationTable_CbCr[N][N] = 
+	{
+		{17, 18, 24, 47, 99, 99, 99, 99},
+		{18, 21, 26, 66, 99, 99, 99, 99},
+		{24, 26, 56, 99, 99, 99, 99, 99},
+		{47, 66, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99},
+		{99, 99, 99, 99, 99, 99, 99, 99}
+	};
+	short result_zigzag_Y[64];
+	short result_zigzag_Cb[64];
+	short result_zigzag_Cr[64]; 
+	int result_dpcm_Y;
+	int result_dpcm_Cb;
+	int result_dpcm_Cr;
+	short previousDC_Y = 0, previousDC_Cb = 0, previousDC_Cr = 0;
+	int DC_Y;
+	int DC_Cb;
+	int DC_Cr;
+	int freq;
+	int count;
+	int sum=0;
+	short result_rle_Y[128]={0};
+	short result_rle_Cb[128]={0};
+	short result_rle_Cr[128]={0};
+	int is_print;
+	int printcon=0;
+	int row;
+	int column;
+
+	
+
+	fscanf(fp_inverserle,"%d %d",&row,&column);
+    for (i = 0; i < H; i += 8) 
+	{
+        for (j = 0; j < W; j += 8) 
+		{
+			sum=0;
+			fscanf(fp_inverserle,"%d",&DC_Y);
+			for(m=0;m<N*N*2;m+=2)
+			{
+				fscanf(fp_inverserle,"%d",&freq);
+				fscanf(fp_inverserle,"%d",&count);
+				result_rle_Y[m]=freq;
+				result_rle_Y[m+1]=count;
+				sum+=count;
+				if(sum>=63)
+				{
+					break;
+				}
+			}
+
+			sum=0;
+			fscanf(fp_inverserle,"%d",&DC_Cb);
+			for(m=0;m<N*N*2;m+=2)
+			{
+				fscanf(fp_inverserle,"%d",&freq);
+				fscanf(fp_inverserle,"%d",&count);
+				result_rle_Cb[m]=freq;
+				result_rle_Cb[m+1]=count;
+				sum+=count;
+				if(sum>=63)
+				{
+					break;
+				}
+			}
+
+			sum=0;
+			fscanf(fp_inverserle,"%d",&DC_Cr);
+			for(m=0;m<N*N*2;m+=2)
+			{
+				fscanf(fp_inverserle,"%d",&freq);
+				fscanf(fp_inverserle,"%d",&count);
+				result_rle_Cr[m]=freq;
+				result_rle_Cr[m+1]=count;
+				sum+=count;
+				if(sum>=63)
+				{
+					break;
+				}
+			}
+
+			runLengthDecode(result_rle_Y,result_zigzag_Y);
+			runLengthDecode(result_rle_Cb,result_zigzag_Cb);
+			runLengthDecode(result_rle_Cr,result_zigzag_Cr);
+			
+			result_zigzag_Y[0]=DC_Y;
+			result_zigzag_Cb[0]=DC_Cb;
+			result_zigzag_Cr[0]=DC_Cr;
+
+			
+
+			// printf("\n");
+			// if(i==0 && j==0)
+			// {
+			// 	for(m=0;m<N;m++)
+			// 	{
+			// 		for(n=0;n<N;n++)
+			// 		{
+			// 			printf("%5d",result_rle_Y[m*N+n]);
+			// 		}
+			// 		printf("\n");
+			// 	}
+			// }
+
+			// for(int a=0;a<64;a++)
+			// {
+			// 	fscanf(fp_inversezigzag,"%d",&result_zigzag_Y[a]);
+			// 	fscanf(fp_inversezigzag,"%d",&result_zigzag_Cb[a]);
+			// 	fscanf(fp_inversezigzag,"%d",&result_zigzag_Cr[a]);
+			// }
+				// fscanf(fp_inversedpcm,"%d",&result_dpcm_Y);
+				// fscanf(fp_inversedpcm,"%d",&result_dpcm_Cb);
+				// fscanf(fp_inversedpcm,"%d",&result_dpcm_Cr);
+
+			
+
+            // if (i == 0 && j == 0) 
+			// {
+            //     // 第一個塊，直接使用DPCM值
+            //     block_Y[0][0] = result_dpcm_Y;
+            //     block_Cb[0][0] = result_dpcm_Cb;
+            //     block_Cr[0][0] = result_dpcm_Cr;
+            // } 
+			// else 
+			// {
+            //     // 後續塊，加上前一塊的DC分量
+            //     block_Y[0][0] = result_dpcm_Y + previousDC_Y;
+            //     block_Cb[0][0] = result_dpcm_Cb + previousDC_Cb;
+            //     block_Cr[0][0] = result_dpcm_Cr + previousDC_Cr;
+            // }
+
+            // // 更新前一塊的DC分量
+            // previousDC_Y = block_Y[0][0];
+            // previousDC_Cb = block_Cb[0][0];
+            // previousDC_Cr = block_Cr[0][0];
+
+			
+
+			inverse_zigzag(result_zigzag_Y,block_Y);
+			inverse_zigzag(result_zigzag_Cb,block_Cb);
+			inverse_zigzag(result_zigzag_Cr,block_Cr);
+
+			is_print=0;
+			for(m=0;m<N;m++)
+			{
+				for(n=0;n<N;n++)
+				{
+					if(block_Y_1[m][n]!=block_Y[m][n])	
+					{
+						//printf("i=%d j=%d\n",i,j);
+						is_print=1;
+						printcon++;
+						break;
+					}
+				}
+				if(is_print==1)
+				{
+					break;
+				}
+			}
+
+			if(is_print==1&&printcon==1)
+			{
+				printf("i=%d j=%d\n",i,j);
+				for(m=0;m<N;m++)
+				{
+					for(n=0;n<N;n++)
+					{
+						printf("%5d",block_Y_1[m][n]);
+					}
+					printf("\n");
+				}
+			
+
+			
+			
+				for(m=0;m<N;m++)
+				{
+					for(n=0;n<N;n++)
+					{
+						printf("%5d",block_Y[m][n]);
+					}
+					printf("\n");
+				}
+			}
+								
+				//}
+			//}
+			// block_Y[0][0]=result_dpcm_Y;
+			// block_Cb[0][0]=result_dpcm_Cb;
+			// block_Cr[0][0]=result_dpcm_Cr;
+			
+            // // 讀取每個8x8的壓縮塊
+            // fread(block_Y, sizeof(double), 64, fp_qF_Y);
+            // fread(block_Cb, sizeof(double), 64, fp_qF_Cb);
+            // fread(block_Cr, sizeof(double), 64, fp_qF_Cr);
+
+            // 進行逆量化
+            inverse_quantization(block_Y,inverse_quantizationTable_Y);
+			inverse_quantization(block_Cb,inverse_quantizationTable_CbCr);
+			inverse_quantization(block_Cr,inverse_quantizationTable_CbCr);
+
+			for (m = 0; m < 8 && (i + m) < H; m++) 
+			{
+                for (n = 0; n < 8 && (j + n) < W; n++) 
+				{
+					block_Y[m][n]=block_Y[m][n]+error_Y[m][n];
+					block_Cb[m][n]=block_Cb[m][n]+error_Cb[m][n];
+					block_Cr[m][n]=block_Cr[m][n]+error_Cr[m][n];
+				}
+			}
+
+            // 進行逆DCT
+            idct(block_Y, idct_Y);
+            idct(block_Cb, idct_Cb);
+            idct(block_Cr, idct_Cr);
+
+            // 將轉換後的數據填充到array中
+            for (m = 0; m < 8 && (i + m) < H; m++) 
+			{
+                for (n = 0; n < 8 && (j + n) < W; n++) 
+				{
+                    array[i + m][j + n].R = (unsigned char) idct_Y[m][n];
+                    array[i + m][j + n].G = (unsigned char) idct_Cb[m][n];
+                    array[i + m][j + n].B = (unsigned char) idct_Cr[m][n];
+
+                    // YCbCr到RGB的轉換（如果有必要）
+                    // ycbcrToRgb(&array[i + m][j + n]);
+                }
+            }
+
+        }
+    }
+}
 // 輸出 BMP 標頭和數據的函數
 void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip) 
 {
@@ -578,5 +882,50 @@ void inverse_quantization(short matrix[N][N], int inverse_quantization_table[N][
         {
             matrix[i][j] = matrix[i][j] * inverse_quantization_table[i][j];
         }
+    }
+}
+
+void inverse_zigzag(short zigzag_result[N * N],short dct_result[N][N])
+{
+	int zigzag[N][N] = {
+    {0, 1, 5, 6, 14, 15, 27, 28},
+    {2, 4, 7, 13, 16, 26, 29, 42},
+    {3, 8, 12, 17, 25, 30, 41, 43},
+    {9, 11, 18, 24, 31, 40, 44, 53},
+    {10, 19, 23, 32, 39, 45, 52, 54},
+    {20, 22, 33, 38, 46, 51, 55, 60},
+    {21, 34, 37, 47, 50, 56, 59, 61},
+    {35, 36, 48, 49, 57, 58, 62, 63},
+	};
+	for(int i=0;i<N;i++)
+	{
+		for(int j=0;j<N;j++)
+		{
+			dct_result[i][j]=(short)zigzag_result[zigzag[i][j]];
+			//dct_result[i][j]=0;
+		}
+	}
+}
+
+void runLengthDecode(short *encoded, short zigzag_result[N * N]) 
+{
+	int sum=1;
+    for (int i = 0;sum<=63; i+=2) 
+	{
+        // Read the number
+        int number = encoded[i];
+
+        // Read the count (number of repetitions)
+        int count = 0;
+        
+        count = encoded[i+1];
+        
+		// Print the number 'count' times
+        for (int j = 0; j < count; j++) 
+		{
+            // Assuming zigzag_result is a 1D array representing a 2D array of size N*N
+            zigzag_result[sum+j] = number; 
+        }
+		sum+=count;
     }
 }
