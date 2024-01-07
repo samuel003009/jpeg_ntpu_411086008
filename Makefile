@@ -18,5 +18,6 @@ demo1:
 
 clean:
 	rm -f encoder.exe decoder.exe R.txt G.txt B.txt dim.txt
+	rm -f Qt_Y.txt Qt_Cb.txt Qt_Cr.txt dim.txt qF_Y.raw qF_Cb.raw qF_Cr.raw eF_Y.raw eF_Cb.raw eF_Cr.raw
 
 .PHONY: build_encoder build_decoder demo0 clean
