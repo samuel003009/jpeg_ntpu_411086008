@@ -34,6 +34,16 @@ typedef struct RGB
 	unsigned char B;
 } ImgRGB;
 
+typedef struct RGB_1
+{
+	unsigned char R_1;
+	unsigned char G_1;
+	unsigned char B_1;
+}ImgRGB_1;
+
+ImgRGB_1** malloc_2D_1(int row, int col);
+void InputData(FILE* fp, ImgRGB_1 **array, int H, int W);
+
 //function 0
 void readheader(FILE* fp, Bitmap *x);
 ImgRGB** malloc_2D(int row, int col);
@@ -44,7 +54,7 @@ void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip);
 void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE* fp_eF_Cb,FILE* fp_eF_Cr, ImgRGB **array, int H, int W);
 void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, int H, int W);
 void ycbcr2rgb(ImgRGB **array, int H, int W); 
-void idct(short matrix[N][N], double result[N][N]);
+void idct(short matrix[N][N], float result[N][N]);
 void inverse_quantization(short matrix[N][N], int inverse_quantization_table[N][N]);
 
 //function 2
@@ -73,9 +83,16 @@ int main(int argc, char **argv)
 	int mode;
 	char rle_ascii[100];
 	int i, j, x, y ,a ,b;
-	double matrix[N][N];
-	double block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
+	float matrix[N][N];
+	float block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
 	FILE *fp_out;
+
+	float energy_noise_R=0.0;
+    float energy_noise_G=0.0;
+    float energy_noise_B=0.0;
+    float energy_original_R=0.0;
+    float energy_original_G=0.0;
+    float energy_original_B=0.0;
 
 	method=atoi(argv[1]);
 	strcpy(inputbmp,argv[2]);
@@ -181,7 +198,7 @@ int main(int argc, char **argv)
 	printf("Image line skip=%d bytes\n", skip);
 	printf("# of 8x8 blocks: W=%d x H=%d blocks, total %d blocks\n", block_W, block_H, block_W*block_H);
 
-	printf("\nLoading BMP data: RRGGBB RRGGBB ... (BGR format in BMP file)\n");
+	printf("Loading BMP data: RRGGBB RRGGBB ... (BGR format in BMP file)\n");
 
 	if(method == 0)
 	{
@@ -261,6 +278,7 @@ int main(int argc, char **argv)
 
 	if(method == 1 && strcmp(inputbmp,"ResKimberlyNCat.bmp") != 0)
 	{
+		FILE* fp_original=fopen(original,"r");
 		FILE* fp_qt_Y=fopen(output_Qt_Y,"r");
 		FILE* fp_qt_Cb=fopen(output_Qt_Cb,"r");
 		FILE* fp_qt_Cr=fopen(output_Qt_Cr,"r");
@@ -271,18 +289,52 @@ int main(int argc, char **argv)
 
 		// 分配二維記憶體空間，用於儲存 RGB 數據
 		ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
+		ImgRGB_1 **Data_RGB_1 = malloc_2D_1(bmpheader.height, bmpheader.width);
 		InputData_1_q(fp_qF_Y,fp_qF_Cb,fp_qF_Cr, Data_RGB, H, W);
+		InputData(fp_original,Data_RGB_1,H,W);
+		for (int c = 0; c < H; c++)
+        {
+            for (int d = 0; d < W; d++)
+            {
+				energy_original_R+=(Data_RGB_1[c][d].R_1)*(Data_RGB_1[c][d].R_1);
+				energy_original_G+=(Data_RGB_1[c][d].G_1)*(Data_RGB_1[c][d].G_1);
+				energy_original_B+=(Data_RGB_1[c][d].B_1)*(Data_RGB_1[c][d].B_1);
+			}
+		}
 
 		printf("Data size loaded: %d bytes\n", H*W * 3);
+		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
 
-		
+		for (int c = 0; c < H; c++)
+        {
+            for (int d = 0; d < W; d++)
+            {
+				energy_original_R+=(Data_RGB_1[c][d].R_1)*(Data_RGB_1[c][d].R_1);
+				energy_original_G+=(Data_RGB_1[c][d].G_1)*(Data_RGB_1[c][d].G_1);
+				energy_original_B+=(Data_RGB_1[c][d].B_1)*(Data_RGB_1[c][d].B_1);
+			}
+		}
 		// 對輸入資料進行ycbcr2rgb
 		ycbcr2rgb(Data_RGB, H, W);
 
+		for (int c = 0; c < H; c++)
+        {
+            for (int d = 0; d < W; d++)
+            {
+				energy_noise_R+=(Data_RGB[c][d].R-Data_RGB_1[c][d].R_1)*(Data_RGB[c][d].R-Data_RGB_1[c][d].R_1);
+				energy_noise_G+=(Data_RGB[c][d].G-Data_RGB_1[c][d].G_1)*(Data_RGB[c][d].G-Data_RGB_1[c][d].G_1);
+				energy_noise_B+=(Data_RGB[c][d].B-Data_RGB_1[c][d].B_1)*(Data_RGB[c][d].B-Data_RGB_1[c][d].B_1);
+			}
+		}
+		
+
+		printf("SQNR(R):%f\n",10*log10(energy_original_R/energy_noise_R));
+		printf("SQNR(G):%f\n",10*log10(energy_original_G/energy_noise_G));
+		printf("SQNR(B):%f\n",10*log10(energy_original_B/energy_noise_B));
 		// 輸出 BMP 檔案
 		output_bmp(Data_RGB, fp_out, bmpheader, skip);
 
-		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
+		
 
 		// 釋放記憶體並關閉檔案
 		free(Data_RGB[0]);
@@ -306,8 +358,8 @@ int main(int argc, char **argv)
 		ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
 		InputData_2(Data_RGB, H, W,fp_rle_ascii);
 
-		printf("Data size loaded: %d bytes\n", H*W * 3);
-
+		printf("Data size loaded: %d bytes\n\n", H*W * 3);
+		printf("\nOutput decompressed image to: %s\n", inputbmp);
 		
 		// 對輸入資料進行ycbcr2rgb
 		ycbcr2rgb(Data_RGB, H, W);
@@ -315,7 +367,7 @@ int main(int argc, char **argv)
 		// 輸出 BMP 檔案
 		output_bmp(Data_RGB, fp_out, bmpheader, skip);
 
-		printf("\nOutput decompressed image to: %s\n\n", inputbmp);
+		
 
 		fclose(fp_rle_ascii);
 		fclose(fp_out);
@@ -336,6 +388,42 @@ ImgRGB** malloc_2D(int row, int col)
 		Array[i] = Data;
 	}
 	return Array;
+}
+
+ImgRGB_1** malloc_2D_1(int row, int col)
+{
+	ImgRGB_1 **Array, *Data;
+	int i;
+	Array = (ImgRGB_1**)malloc(row * sizeof(ImgRGB_1 *));
+	Data = (ImgRGB_1*)malloc(row * col * sizeof(ImgRGB_1));
+	for (i = 0; i < row; i++, Data += col) 
+	{
+		Array[i] = Data;
+	}
+	return Array;
+}
+
+void InputData(FILE* fp, ImgRGB_1 **array, int H, int W) 
+{
+	int temp;
+	char skip_buf[3];
+	int i, j;
+	for (i = 0; i < H; i++) 
+	{
+		for (j = 0; j < W; j++)
+		{
+			temp = fgetc(fp);
+			array[i][j].B_1 = temp;
+			temp = fgetc(fp);
+			array[i][j].G_1 = temp;
+			temp = fgetc(fp);
+			array[i][j].R_1 = temp;
+			//if (i < 9 && j < 8) printf("%02x%02x%02x ", array[i][j].R, array[i][j].G, array[i][j].B); // DEBUG
+		}
+		//if (skip != 0) fread(skip_buf, skip, 1, fp);
+		//if (i < 9) printf("\n"); // DEBUG
+	}
+	//printf("\n"); // DEBUG
 }
 
 // 將資料輸入到 RGB 結構中的函數
@@ -362,8 +450,8 @@ void InputData_0(FILE* fp_R, FILE* fp_G, FILE* fp_B, ImgRGB **array, int H, int 
 void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE* fp_eF_Cb,FILE* fp_eF_Cr, ImgRGB **array, int H, int W) 
 {
     short block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
-	double error_Y[8][8],error_Cb[8][8],error_Cr[8][8];
-    double idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
+	float error_Y[8][8],error_Cb[8][8],error_Cr[8][8];
+    float idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
     int i, j, m, n;
 	int inverse_quantizationTable_Y[N][N] = 
 	{
@@ -400,9 +488,9 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
 					fread(&block_Y[m][n], sizeof(short), 1, fp_qF_Y);		//讀取結果跟量化誤差
 					fread(&block_Cb[m][n], sizeof(short), 1, fp_qF_Cb);
 					fread(&block_Cr[m][n], sizeof(short), 1, fp_qF_Cr);
-					fread(&error_Y[m][n], sizeof(double), 1, fp_eF_Y);
-					fread(&error_Cb[m][n], sizeof(double), 1, fp_eF_Cb);
-					fread(&error_Cr[m][n], sizeof(double), 1, fp_eF_Cr);					
+					fread(&error_Y[m][n], sizeof(float), 1, fp_eF_Y);
+					fread(&error_Cb[m][n], sizeof(float), 1, fp_eF_Cb);
+					fread(&error_Cr[m][n], sizeof(float), 1, fp_eF_Cr);					
 				}
 			}
 
@@ -444,7 +532,7 @@ void InputData_1(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr,FILE* fp_eF_Y,FILE*
 void InputData_1_q(FILE* fp_qF_Y,FILE* fp_qF_Cb,FILE* fp_qF_Cr, ImgRGB **array, int H, int W) 
 {
     short block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
-    double idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
+    float idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
     int i, j, m, n;
 	//Y量化table
 	int inverse_quantizationTable_Y[N][N] = 
@@ -515,8 +603,8 @@ void InputData_2(ImgRGB **array, int H, int W,FILE* fp_inverserle)
 {
     short block_Y[8][8], block_Cb[8][8], block_Cr[8][8];
 	short block_Y_1[8][8], block_Cb_1[8][8], block_Cr_1[8][8];
-	double error_Y[8][8],error_Cb[8][8],error_Cr[8][8];
-    double idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
+	float error_Y[8][8],error_Cb[8][8],error_Cr[8][8];
+    float idct_Y[8][8], idct_Cb[8][8], idct_Cr[8][8];
     int i, j, m, n;
 	int inverse_quantizationTable_Y[N][N] = 
 	{
@@ -674,49 +762,50 @@ void InputData_2(ImgRGB **array, int H, int W,FILE* fp_inverserle)
 			inverse_zigzag(result_zigzag_Cb,block_Cb);
 			inverse_zigzag(result_zigzag_Cr,block_Cr);
 
-			is_print=0;
-			for(m=0;m<N;m++)
-			{
-				for(n=0;n<N;n++)
-				{
-					if(block_Y_1[m][n]!=block_Y[m][n])	
-					{
-						//printf("i=%d j=%d\n",i,j);
-						is_print=1;
-						printcon++;
-						break;
-					}
-				}
-				if(is_print==1)
-				{
-					break;
-				}
-			}
+			//DEBUG
+			// is_print=0;
+			// for(m=0;m<N;m++)
+			// {
+			// 	for(n=0;n<N;n++)
+			// 	{
+			// 		if(block_Y_1[m][n]!=block_Y[m][n])	
+			// 		{
+			// 			//printf("i=%d j=%d\n",i,j);
+			// 			is_print=1;
+			// 			printcon++;
+			// 			break;
+			// 		}
+			// 	}
+			// 	if(is_print==1)
+			// 	{
+			// 		break;
+			// 	}
+			// }
 
-			if(is_print==1&&printcon==1)
-			{
-				printf("i=%d j=%d\n",i,j);
-				for(m=0;m<N;m++)
-				{
-					for(n=0;n<N;n++)
-					{
-						printf("%5d",block_Y_1[m][n]);
-					}
-					printf("\n");
-				}
+			// if(is_print==1&&printcon==1)
+			// {
+			// 	printf("i=%d j=%d\n",i,j);
+			// 	for(m=0;m<N;m++)
+			// 	{
+			// 		for(n=0;n<N;n++)
+			// 		{
+			// 			printf("%5d",block_Y_1[m][n]);
+			// 		}
+			// 		printf("\n");
+			// 	}
 			
 
 			
 			
-				for(m=0;m<N;m++)
-				{
-					for(n=0;n<N;n++)
-					{
-						printf("%5d",block_Y[m][n]);
-					}
-					printf("\n");
-				}
-			}
+			// 	for(m=0;m<N;m++)
+			// 	{
+			// 		for(n=0;n<N;n++)
+			// 		{
+			// 			printf("%5d",block_Y[m][n]);
+			// 		}
+			// 		printf("\n");
+			// 	}
+			// }
 								
 				//}
 			//}
@@ -757,9 +846,6 @@ void InputData_2(ImgRGB **array, int H, int W,FILE* fp_inverserle)
                     array[i + m][j + n].R = (unsigned char) idct_Y[m][n];
                     array[i + m][j + n].G = (unsigned char) idct_Cb[m][n];
                     array[i + m][j + n].B = (unsigned char) idct_Cr[m][n];
-
-                    // YCbCr到RGB的轉換（如果有必要）
-                    // ycbcrToRgb(&array[i + m][j + n]);
                 }
             }
 
@@ -795,10 +881,10 @@ void output_bmp(ImgRGB **RGB, FILE* outfile, Bitmap bmpheader, int skip)
 			fwrite(&RGB[x][y].B, sizeof(char), 1, outfile);
 			fwrite(&RGB[x][y].G, sizeof(char), 1, outfile);
 			fwrite(&RGB[x][y].R, sizeof(char), 1, outfile);
-			if (x < 9 && y < 8) printf("%02x%02x%02x ", RGB[x][y].R, RGB[x][y].G, RGB[x][y].B); // DEBUG
+			//if (x < 9 && y < 8) printf("%02x%02x%02x ", RGB[x][y].R, RGB[x][y].G, RGB[x][y].B); // DEBUG
 		}
 		if (skip != 0) { fwrite(skip_buf, skip, 1, outfile); }
-		if (x < 9) printf("\n"); // DEBUG
+		//if (x < 9) printf("\n"); // DEBUG
 	}
 }
 
@@ -814,9 +900,9 @@ void ycbcr2rgb(ImgRGB **array, int H, int W)
             float Cr = array[i][j].B - 128;
 
             // 轉換 YCbCr 到 RGB
-            float R = Y + 1.402 * Cr;
-            float G = Y - 0.344136 * Cb - 0.714136 * Cr;
-            float B = Y + 1.772 * Cb;
+            float R = Y - 0.00000122 * Cb + 1.402 * Cr;
+            float G = Y - 0.34413568 * Cb - 0.71413616 * Cr;
+            float B = Y + 1.77200007 * Cb + 0.00000041* Cr;
 
             // 限制 RGB 值的範圍在 0 到 255 之間
             R = fmax(0, fmin(255, R));
@@ -832,7 +918,7 @@ void ycbcr2rgb(ImgRGB **array, int H, int W)
 }
 
 //計算DCT係數
-double C(int x) 
+float C(int x) 
 {
     if (x == 0)
         return sqrt(1.0 / N);
@@ -841,7 +927,7 @@ double C(int x)
 }
 
 // inverse DCT
-void idct(short matrix[N][N], double result[N][N]) 
+void idct(short matrix[N][N], float result[N][N]) 
 {
     int i, j, k, l;
 
@@ -852,7 +938,7 @@ void idct(short matrix[N][N], double result[N][N])
 		{
 
             // initialize the sum to zero
-            double sum = 0;
+            float sum = 0;
 
             // loop through the rows and columns of the input matrix
             for (k = 0; k < N; k++) 
