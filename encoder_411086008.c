@@ -42,10 +42,10 @@ void output_bmp(ImgRGB **RGB, Bitmap bmpheader,FILE* out_R,FILE* out_G,FILE* out
 
 //function 1
 void rgb2ycbcr(ImgRGB **array, int H, int W);
-double C(int x);
-void dct(double matrix[N][N], double result[N][N]); 
+float C(int x);
+void dct(float matrix[N][N], float result[N][N]); 
 void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out_Qt_Cr,FILE* out_qF_Y,FILE* out_qF_Cb,FILE* out_qF_Cr,FILE* out_eF_Y,FILE* out_eF_Cb,FILE* out_eF_Cr);
-void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]);
+void quantize(float dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]);
 
 //function 2
 void dpcm(short dct_result[N][N], short dpcm_result[N][N], short* previousDC, FILE* fp_dpcm);
@@ -71,7 +71,7 @@ int main(int argc, char **argv, ImgRGB **array)
 	char eF_Cb[100];
 	char eF_Cr[100];
 	int i, j, x, y ,a ,b;
-	double matrix[N][N];
+	float matrix[N][N];
 	char mode[100];
 	char rle_ascii[100];
 	FILE* fp_in;
@@ -170,15 +170,15 @@ int main(int argc, char **argv, ImgRGB **array)
 	if (W % 8 != 0) block_W++;
 
 	printf("Image size: Width: %d x Height=%d pixels, total %d bytes\n", W, H, W*H * 3);
-	printf("\nLoading BMP data: RRGGBB RRGGBB ... (BGR format in BMP file)\n");
-	printf("%d %d\n",H,W);
+	printf("W:%d H:%d\n",W,H);
+	printf("Loading BMP data: RRGGBB RRGGBB ... (BGR format in BMP file)\n");
 
 	// 分配二維記憶體空間，用於儲存 RGB 數據
 	ImgRGB **Data_RGB = malloc_2D(bmpheader.height, bmpheader.width);
 	InputData(fp_in, Data_RGB, bmpheader.height, bmpheader.width, skip);
 	fclose(fp_in);
 
-	printf("Data size loaded: %d bytes\n", H*W * 3);
+	printf("Data size loaded: %d bytes\n\n", H*W * 3);
 
 	if(method == 0)
 	{
@@ -202,6 +202,8 @@ int main(int argc, char **argv, ImgRGB **array)
 		// 對輸入資料進行rgb2ycbcr
 		rgb2ycbcr(Data_RGB, H, W);
 		img_dct(Data_RGB, H, W,fp_Qt_Y,fp_Qt_Cb,fp_Qt_Cr,fp_qF_Y,fp_qF_Cb,fp_qF_Cr,fp_eF_Y,fp_eF_Cb,fp_eF_Cr);
+
+
 
 		// 釋放記憶體並關閉檔案
 		free(Data_RGB[0]);
@@ -237,37 +239,37 @@ int main(int argc, char **argv, ImgRGB **array)
 void readheader(FILE* fp, Bitmap *x) 
 {
 	fread(&x->identifier, sizeof(x->identifier), 1, fp);
-	printf("%c %c\n",x->identifier[0],x->identifier[1]);
+	//printf("%c %c\n",x->identifier[0],x->identifier[1]);
 	fread(&x->filesize, sizeof(x->filesize), 1, fp);
-	printf("%d\n",x->filesize);
+	//printf("%d\n",x->filesize);
 	fread(&x->reserved, sizeof(x->reserved), 1, fp);
-	printf("%d\n",x->reserved);
+	//printf("%d\n",x->reserved);
 	fread(&x->reserved2, sizeof(x->reserved2), 1, fp);
-	printf("%d\n",x->reserved2);
+	//printf("%d\n",x->reserved2);
 	fread(&x->bitmap_dataoffset, sizeof(x->bitmap_dataoffset), 1, fp);
-	printf("%d\n",x->bitmap_dataoffset);
+	//printf("%d\n",x->bitmap_dataoffset);
 	fread(&x->bitmap_headersize, sizeof(x->bitmap_headersize), 1, fp);
-	printf("%d\n",x->bitmap_headersize);
+	//printf("%d\n",x->bitmap_headersize);
 	fread(&x->width, sizeof(x->width), 1, fp);
-	printf("%d\n",x->width);
+	//printf("%d\n",x->width);
 	fread(&x->height, sizeof(x->height), 1, fp);
-	printf("%d\n",x->height);
+	//printf("%d\n",x->height);
 	fread(&x->planes, sizeof(x->planes), 1, fp);
-	printf("%d\n",x->planes);
+	//printf("%d\n",x->planes);
 	fread(&x->bits_perpixel, sizeof(x->bits_perpixel), 1, fp);
-	printf("%d\n",x->bits_perpixel);
+	//printf("%d\n",x->bits_perpixel);
 	fread(&x->compression, sizeof(x->compression), 1, fp);
-	printf("%d\n",x->compression);
+	//printf("%d\n",x->compression);
 	fread(&x->bitmap_datasize, sizeof(x->bitmap_datasize), 1, fp);
-	printf("%d\n",x->bitmap_datasize);
+	//printf("%d\n",x->bitmap_datasize);
 	fread(&x->hresolution, sizeof(x->hresolution), 1, fp);
-	printf("%d\n",x->hresolution);
+	//printf("%d\n",x->hresolution);
 	fread(&x->vresolution, sizeof(x->vresolution), 1, fp);
-	printf("%d\n",x->vresolution);
+	//printf("%d\n",x->vresolution);
 	fread(&x->usedcolors, sizeof(x->usedcolors), 1, fp);
-	printf("%d\n",x->usedcolors);
+	//printf("%d\n",x->usedcolors);
 	fread(&x->importantcolors, sizeof(x->importantcolors), 1, fp);
-	printf("%d\n",x->importantcolors);
+	//printf("%d\n",x->importantcolors);
 }
 
 // 分配二維記憶體空間的函數
@@ -300,12 +302,12 @@ void InputData(FILE* fp, ImgRGB **array, int H, int W, int skip)
 			array[i][j].G = temp;
 			temp = fgetc(fp);
 			array[i][j].R = temp;
-			if (i < 9 && j < 8) printf("%02x%02x%02x ", array[i][j].R, array[i][j].G, array[i][j].B); // DEBUG
+			//if (i < 9 && j < 8) printf("%02x%02x%02x ", array[i][j].R, array[i][j].G, array[i][j].B); // DEBUG
 		}
 		if (skip != 0) fread(skip_buf, skip, 1, fp);
-		if (i < 9) printf("\n"); // DEBUG
+		//if (i < 9) printf("\n"); // DEBUG
 	}
-	printf("\n"); // DEBUG
+	//printf("\n"); // DEBUG
 }
 
 // 輸出RGB數據
@@ -340,8 +342,8 @@ void rgb2ycbcr(ImgRGB **array, int H, int W)
 
             // 轉換 RGB 到 YCbCr
             float Y = 0.299 * R + 0.587 * G + 0.114 * B;
-            float Cb = -0.1687 * R - 0.3313 * G + 0.5 * B + 128;
-            float Cr = 0.5 * R - 0.4187 * G - 0.0813 * B + 128;
+            float Cb = -0.168736 * R - 0.331264 * G + 0.5 * B + 128;
+            float Cr = 0.5 * R - 0.418688 * G - 0.081312 * B + 128;
 
             array[i][j].R = (unsigned char)Y;
             array[i][j].G = (unsigned char)Cb;
@@ -351,7 +353,7 @@ void rgb2ycbcr(ImgRGB **array, int H, int W)
 }
 
 // 計算DCT係數
-double C(int x) 
+float C(int x) 
 {
     if (x == 0)
         return sqrt(1.0 / N);
@@ -360,7 +362,7 @@ double C(int x)
 }
 
 // 每8*8的matrix做2D DCT
-void dct(double matrix[N][N], double result[N][N]) 
+void dct(float matrix[N][N], float result[N][N]) 
 {
     int i, j, k, l;
 
@@ -371,7 +373,7 @@ void dct(double matrix[N][N], double result[N][N])
 		{
 
             // initialize the sum to zero 
-            double sum = 0;
+            float sum = 0;
 
             // loop through the rows and columns of the input matrix
             for (k = 0; k < N; k++) 
@@ -392,18 +394,18 @@ void dct(double matrix[N][N], double result[N][N])
 void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out_Qt_Cr,FILE* out_qF_Y,FILE* out_qF_Cb,FILE* out_qF_Cr,FILE* out_eF_Y,FILE* out_eF_Cb,FILE* out_eF_Cr) 
 {
     int i, j, a, b, c, d;
-	double matrix_R[N][N];
-	double result_R[N][N];
-	double matrix_G[N][N];
-	double result_G[N][N];
-	double matrix_B[N][N];
-	double result_B[N][N];
-	double temp_Y[N][N];
-	double temp_Cb[N][N];
-	double temp_Cr[N][N];
-	double error_Y[N][N];
-	double error_Cb[N][N];
-	double error_Cr[N][N];
+	float matrix_R[N][N];
+	float result_R[N][N];
+	float matrix_G[N][N];
+	float result_G[N][N];
+	float matrix_B[N][N];
+	float result_B[N][N];
+	float temp_Y[N][N];
+	float temp_Cb[N][N];
+	float temp_Cr[N][N];
+	float error_Y[N][N];
+	float error_Cb[N][N];
+	float error_Cr[N][N];
 	short quantize_result_Y[N][N];
 	short quantize_result_Cb[N][N];
 	short quantize_result_Cr[N][N];
@@ -431,6 +433,13 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 		{99, 99, 99, 99, 99, 99, 99, 99}
 	};
 
+    float energy_noise_Y[N][N] = {0.0};
+    float energy_noise_Cb[N][N] = {0.0};
+    float energy_noise_Cr[N][N] = {0.0};
+    float energy_original_Y[N][N] = {0.0};
+    float energy_original_Cb[N][N] = {0.0};
+    float energy_original_Cr[N][N] = {0.0};
+
 
 	for(i = 0;i < N;i++)
 	{
@@ -454,15 +463,15 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 				{
 					if (((i+a) < H) && ((j+b) < W))
 					{
-						matrix_R[a][b] = (double) array[i+a][j+b].R;
-						matrix_G[a][b] = (double) array[i+a][j+b].G;
-						matrix_B[a][b] = (double) array[i+a][j+b].B;
+						matrix_R[a][b] = (float) array[i+a][j+b].R;
+						matrix_G[a][b] = (float) array[i+a][j+b].G;
+						matrix_B[a][b] = (float) array[i+a][j+b].B;
 					}
 					else
 					{
-						matrix_R[a][b] = (double) 0;
-						matrix_G[a][b] = (double) 0;
-						matrix_B[a][b] = (double) 0;
+						matrix_R[a][b] = (float) 0;
+						matrix_G[a][b] = (float) 0;
+						matrix_B[a][b] = (float) 0;
 					}
 				}
 			}
@@ -495,6 +504,40 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 				}
 			}
 
+
+
+            for (c = 0; c < N; c++)
+            {
+                for (d = 0; d < N; d++)
+                {
+                    // 計算能量雜訊，即量化前後 DCT 係數的差的平方
+                    float original_Y = temp_Y[c][d];
+                    float original_Cb = temp_Cb[c][d];
+                    float original_Cr = temp_Cr[c][d];
+
+                    energy_original_Y[c][d] += original_Y * original_Y;
+                    energy_original_Cb[c][d] += original_Cb * original_Cb;
+                    energy_original_Cr[c][d] += original_Cr * original_Cr;
+                }
+            }
+
+            for (c = 0; c < N; c++)
+            {
+                for (d = 0; d < N; d++)
+                {
+                    // 計算能量雜訊，即量化前後 DCT 係數的差的平方
+                    float diff_Y = quantize_result_Y[c][d] - temp_Y[c][d];
+                    float diff_Cb = quantize_result_Cb[c][d] - temp_Cb[c][d];
+                    float diff_Cr = quantize_result_Cr[c][d] - temp_Cr[c][d];
+
+                    energy_noise_Y[c][d] += diff_Y * diff_Y;
+                    energy_noise_Cb[c][d] += diff_Cb * diff_Cb;
+                    energy_noise_Cr[c][d] += diff_Cr * diff_Cr;
+                }
+            }
+
+
+
 			for (a = 0; a < N; a++)
 			{
 				for (b = 0; b < N; b++)
@@ -509,13 +552,44 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 			{
 				for (b = 0; b < N; b++)
 				{
-					fwrite(&(error_Y[a][b]), sizeof(double), 1, out_eF_Y);		//印出量化誤差
-					fwrite(&(error_Cb[a][b]), sizeof(double), 1, out_eF_Cb);
-					fwrite(&(error_Cr[a][b]), sizeof(double), 1, out_eF_Cr);
+					fwrite(&(error_Y[a][b]), sizeof(float), 1, out_eF_Y);		//印出量化誤差
+					fwrite(&(error_Cb[a][b]), sizeof(float), 1, out_eF_Cb);
+					fwrite(&(error_Cr[a][b]), sizeof(float), 1, out_eF_Cr);
 				}
 			}
 		}
 	}
+
+    printf("SQNR:Y\n");
+    for (c = 0; c < N; c++)
+    {
+        for (d = 0; d < N; d++)
+        {
+            printf("%f ",10*log10(energy_original_Y[c][d]/energy_noise_Y[c][d]));
+        }
+        printf("\n");
+    }
+
+    printf("\nSQNR:Cb\n");
+    for (c = 0; c < N; c++)
+    {
+        for (d = 0; d < N; d++)
+        {
+            printf("%f ",10*log10(energy_original_Cb[c][d]/energy_noise_Cb[c][d]));
+        }
+        printf("\n");
+    }
+
+    printf("\nSQNR:Cr\n");
+    for (c = 0; c < N; c++)
+    {
+        for (d = 0; d < N; d++)
+        {
+            printf("%f ",10*log10(energy_original_Cr[c][d]/energy_noise_Cr[c][d]));
+        }
+        printf("\n");
+    }
+	printf("\n");
 
 }
 
@@ -524,18 +598,18 @@ void img_dct(ImgRGB **array,int H,int W,FILE* out_Qt_Y,FILE* out_Qt_Cb,FILE* out
 void img_rle(ImgRGB **array,int H,int W,FILE* out_rle) 
 {
     int i, j, a, b, c, d;
-	double matrix_R[N][N];
-	double result_R[N][N];
-	double matrix_G[N][N];
-	double result_G[N][N];
-	double matrix_B[N][N];
-	double result_B[N][N];
-	double temp_Y[N][N];
-	double temp_Cb[N][N];
-	double temp_Cr[N][N];
-	double error_Y[N][N];
-	double error_Cb[N][N];
-	double error_Cr[N][N];
+	float matrix_R[N][N];
+	float result_R[N][N];
+	float matrix_G[N][N];
+	float result_G[N][N];
+	float matrix_B[N][N];
+	float result_B[N][N];
+	float temp_Y[N][N];
+	float temp_Cb[N][N];
+	float temp_Cr[N][N];
+	float error_Y[N][N];
+	float error_Cb[N][N];
+	float error_Cr[N][N];
 	short quantize_result_Y[N][N];
 	short quantize_result_Cb[N][N];
 	short quantize_result_Cr[N][N];
@@ -587,15 +661,15 @@ void img_rle(ImgRGB **array,int H,int W,FILE* out_rle)
 				{
 					if (((i+a) < H) && ((j+b) < W))
 					{
-						matrix_R[a][b] = (double) array[i+a][j+b].R;
-						matrix_G[a][b] = (double) array[i+a][j+b].G;
-						matrix_B[a][b] = (double) array[i+a][j+b].B;
+						matrix_R[a][b] = (float) array[i+a][j+b].R;
+						matrix_G[a][b] = (float) array[i+a][j+b].G;
+						matrix_B[a][b] = (float) array[i+a][j+b].B;
 					}
 					else
 					{
-						matrix_R[a][b] = (double) 0;
-						matrix_G[a][b] = (double) 0;
-						matrix_B[a][b] = (double) 0;
+						matrix_R[a][b] = (float) 0;
+						matrix_G[a][b] = (float) 0;
+						matrix_B[a][b] = (float) 0;
 					}
 				}
 			}
@@ -652,7 +726,7 @@ void img_rle(ImgRGB **array,int H,int W,FILE* out_rle)
 }
 
 // quantize
-void quantize(double dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]) 
+void quantize(float dct_result[N][N], int quantizationTable[N][N],short quantize_result[N][N]) 
 {
     for (int i = 0; i < N; i++) 
     {
